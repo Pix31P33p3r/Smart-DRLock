@@ -82,130 +82,65 @@ void setup() {
 
 /*****************************************Loop Function*********************************************/
 void loop() {
+  // Continuously read RFID tags
   do {
     successRead = getID();  // sets successRead to 1 when we get read from reader otherwise 0
 
-    if (!programMode) {
-      if (digitalRead(BTNDOOR) == LOW) {
-        granted(2000, "NO");
+    // If not in program mode and door button is pressed, grant access
+    if (!programMode && digitalRead(BTNDOOR) == LOW)
+      granted(2000, "NO");
+
+    // Wipe EEPROM if erase button is pressed
+    while (digitalRead(BTNERASE) == LOW && programMode && counter > 0) {
+      print2lcd("Erasing EEPROM", 1, ("Cancel before: " + String(cntr)), 0);
+      digitalWrite(REDLED, LED_ON);    // Indicate the start of EEPROM erasure
+      digitalWrite(BLUELED, LED_OFF);
+      delay(1000);
+      cntr--;
+
+      if (cntr == 0) {  // Check if the erase process should proceed
+        eraseEEPROM();
       }
     }
 
-    //If wipe Button is pressed 'til 10  sec it wipes EEPROM
-    while (digitalRead(BTNERASE) == LOW) {
-
-      if (programMode) {
-        if (counter > 0) {
-          // Serial.println(F("This will remove all records from the EEPROM !"));
-          print2lcd("Erasing EEPROM", 1, ("Cancel before: " + String(cntr)), 0);
-          // Serial.print(F("Cancel before : "));
-          // Serial.println(cntr);
-          digitalWrite(REDLED, LED_ON);    // Red Led stays on to inform user we are going to wipe
-          digitalWrite(BLUELED, LED_OFF);  // Red Led stays on to inform user we are going to wipe
-          delay(1000);
-          cntr--;
-          if (cntr == 0) {  // If button still be pressed, wipe EEPROM
-            // Serial.println(F("Starting Erasing EEPROM"));
-            for (int x = 0; x < EEPROM.length(); x = x + 1) {  //Loop end of EEPROM address
-              if (EEPROM.read(x) == 0) {                       //If EEPROM address 0
-                // do nothing, already clear, go to the next address in order to save time and reduce writes to EEPROM
-              } else {
-                EEPROM.write(x, 0);  // if not write 0 to clear, it takes 3.3mS
-              }
-            }
-            // Serial.println(F("EEPROM Successfully Erased"));
-            print2lcd("EEPROM  Erased", 1, "Successfully", 2);
-            Serial.print("|     Role : ' Master'          Action : ' Erased EEPROM '     \n");
-            analogWrite(REDLED, LED_OFF);  // visualize successful wipe
-            delay(200);
-            analogWrite(REDLED, LED_ON);
-            delay(200);
-            analogWrite(REDLED, LED_OFF);
-            delay(200);
-            analogWrite(REDLED, LED_ON);
-            delay(200);
-            analogWrite(REDLED, LED_OFF);
-
-            digitalWrite(RST, LOW);  // Reseting arduino to apply the wiping
-            delay(50);
-            digitalWrite(RST, HIGH);
-          }
-        }
-        if (digitalRead(BTNERASE) != LOW) {
-          // Serial.println(F("Erasing Cancelled"));
-          print2lcd("    Erasing     ", 0, "Cancelled", 3);
-          analogWrite(REDLED, LED_OFF);
-          cntr = 9;
-          delay(1000);
-          print2lcd("Entered", 4, "Program Mode", 2);
-        }
-        counter--;
-      } else {
-        break;
-      }
-    }
     counter = cntr;
-    if (programMode) {
-      cycleLeds();  // Program Mode cycles through RGB waiting to read a new card
-    } else {
-      normalModeOn();  // Normal mode, blue Power LED is on, all others are off
-    }
-  } while (!successRead);  //the program will not go further while you not get a successful read
+    if (programMode) cycleLeds();
+    else normalModeOn();
+  } while (!successRead);
 
+  // Handle RFID tag scanning
   if (programMode) {
-    if (isMaster(readCard)) {  //If master card scanned again exit program mode
-      // Serial.println(F("Master Card Scanned"));
+    if (isMaster(readCard)) {
       print2lcd("Exited", 5, "Program Mode", 2);
-      // Serial.println(F("Exiting Program Mode"));
-      // Serial.println(F("-----------------------------"));
       programMode = false;
       delay(1000);
       print2lcd(" Access Control", 0, " Scan Your Tag!", 0);
       return;
     } else {
-      if (findID(readCard)) {  // If scanned card is known delete it
+      if (findID(readCard)) {
         print2lcd("Removed Existing", 0, " ID from EEPROM ", 0);
         Serial.print("|     Role :     ' Master '          Action : ' Removed Existing UID: " + uid + " '     \n");
-        // Serial.println(F("Existing UID, removing..."));
         deleteID(readCard);
-        // Serial.println("-----------------------------");
-        // Serial.println(F("Scan a PICC to ADD or REMOVE to EEPROM"));
-      } else {  // If scanned card is not known add it
+      } else {
         print2lcd(" Added New ID ", 1, "to  EEPROM", 3);
         Serial.print("|     Role :     ' Master '          Action : ' Added New UID: " + uid + " '     \n");
-        // Serial.println(F("New UID, adding..."));
         writeID(readCard);
-        // Serial.println(F("-----------------------------"));
-        // Serial.println(F("Scan a PICC to ADD or REMOVE to EEPROM"));
       }
     }
     delay(1000);
     print2lcd("Entered", 4, "Program Mode", 2);
   } else {
-    if (isMaster(readCard)) {  // If scanned card's ID matches Master Card's ID enter program mode
+    if (isMaster(readCard)) {
       programMode = true;
-      // Serial.println(F("Hello Master - Entering Program Mode"));
       print2lcd("Entered", 4, "Program Mode", 2);
-      int count = EEPROM.read(0);  // Read the first Byte of EEPROM that
-      // Serial.print(F("Known UID : "));  // stores the number of ID's in EEPROM
-      // Serial.print(count);
-      // Serial.print(F(" on EEPROM"));
-      // Serial.println();
-      // Serial.println(F("Scan a PICC to ADD or REMOVE to EEPROM\nOrScan Master Card again to Exit Owner Mode"));
-      // Serial.println();
-      // Serial.println(F("-----------------------------"));
+      int count = EEPROM.read(0);
     } else {
-      if (findID(readCard)) {  // If not, see if the card is in the EEPROM
-        // Serial.println(F("Access Granted"));
-        //String Name[] = {"Hamza", "Mohammed", "Fatima Zahra", "Hossain", "Abderrahmane"}; // before i added the "readdatafromtag" function i wanted to test displaying the tag's username to lcd
-        //int rand = (int)random(0, 5);                                                //. it's just 4 testing how could we get which col in lcd to start printing the tag's username .
-        //print2lcd("Welcome Back", 2, Name[rand], ((16 - Name[rand].length()) / 2));  // c2 = ( 16 - Name[ran].lentgh()) / 2
-        print2lcd("Welcome Back", 2, "", 0);  // c2 = ( 16 - name.lentgh()) / 2 .
+      if (findID(readCard)) {
+        print2lcd("Welcome Back", 2, "", 0);
         Serial.print("|     UID :     " + uid + "          Action :     ' Entered the Club '     \n");
-        granted(2000, "YES");  // Open the door lock for 2000 ms
+        granted(2000, "YES");
         print2lcd(" Access Control", 0, " Scan Your Tag!", 0);
-      } else {  // If not, show that the ID was not valid
-        // Serial.println(F("Access Denied"));
+      } else {
         print2lcd(" Access  Denied ", 0, "Unknown :)", 3);
         Serial.print("|     UID :     " + uid + "           Action :     ' Attempted entering the Club '     \n");
         denied();
@@ -213,5 +148,34 @@ void loop() {
       }
     }
   }
+}
+/***************************************************************************************************/
+
+/****************************************EEPROM Erase Function*********************************************/
+void eraseEEPROM() {
+  // Iterate through each address in EEPROM and clear if data exists
+  for (int x = 0; x < EEPROM.length(); x++) {
+    if (EEPROM.read(x) != 0) {
+      EEPROM.write(x, 0);
+    }
+  }
+
+  // Indicate successful erasure on LCD
+  print2lcd("EEPROM  Erased", 1, "Successfully", 2);
+  // Print action to serial monitor
+  Serial.print("|     Role : ' Master'          Action : ' Erased EEPROM '     \n");
+
+  // Visualize successful wipe with LED
+  for (int i = 0; i < 4; i++) {
+    analogWrite(REDLED, LED_OFF);
+    delay(200);
+    analogWrite(REDLED, LED_ON);
+    delay(200);
+  }
+
+  // Reset Arduino to apply wiping
+  digitalWrite(RST, LOW);
+  delay(50);
+  digitalWrite(RST, HIGH);
 }
 /***************************************************************************************************/
