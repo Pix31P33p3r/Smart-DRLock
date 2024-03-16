@@ -31,35 +31,29 @@ uint32_t digit_count(uint32_t nbr) {
 int getID() {
   if (rdm6300.get_new_tag_id()) {
     uint32_t newTagId = rdm6300.get_tag_id();
-    int nbrcntr = digit_count(newTagId);
     uid = String(newTagId, HEX);
     uid.toUpperCase();
     // Serial.print("UID: ");
     // Serial.println(newTagId);
 
+    int nbrcntr = digit_count(newTagId);
     readCard = new uint32_t[nbrcntr];
     for (int i = nbrcntr - 1; i >= 0; i--) {
       readCard[i] = newTagId % 10;
       newTagId /= 10;
     }
-    return (1);
+    return 1;
   }
-  return (0);
+  return 0;
 }
-
-
 /***************************************************************************************************/
 
 /******************************** Check readCard IF is masterCard***********************************/
 
 // Check to see if the ID passed is the master programing card
 boolean isMaster(uint32_t test[]) {
-  if (checkTwo(test, masterCard))
-    return true;
-  else
-    return false;
+  return checkTwo(test, masterCard);
 }
-
 /***************************************************************************************************/
 
 /*****************************************Find ID From EEPROM***************************************/
@@ -76,38 +70,36 @@ boolean findID(uint32_t find[]) {
   }
   return false;
 }
-
 /***************************************************************************************************/
 
 /*****************************************Remove ID from EEPROM*************************************/
 
 void deleteID(uint32_t a[]) {
-  if (!findID(a)) {  // Before we delete from the EEPROM, check to see if we have this card!
-    failedWrite();   // If not
-    // Serial.println(F("Failed! There is something wrong with ID or bad EEPROM"));
-  } else {
-    int num = EEPROM.read(0);  // Get the numer of used spaces, position 0 stores the number of ID cards
-    int slot;                  // Figure out the slot number of the card
-    int start;                 // = ( num * 4 ) + 6; // Figure out where the next slot starts
-    int looping;               // The number of times the loop repeats
-    int j;
-    int count = EEPROM.read(0);  // Read the first Byte of EEPROM that stores number of cards
-    slot = findIDSLOT(a);        // Figure out the slot number of the card to delete
-    start = (slot * 4) + 2;
-    looping = ((num - slot) * 4);
-    num--;                                                  // Decrement the counter by one
-    EEPROM.write(0, num);                                   // Write the new count to the counter
-    for (j = 0; j < looping; j++) {                         // Loop the card shift times
-      EEPROM.write(start + j, EEPROM.read(start + 4 + j));  // Shift the array values to 4 places earlier in the EEPROM
-    }
-    for (int k = 0; k < 4; k++) {  // Shifting loop
-      EEPROM.write(start + j + k, 0);
-    }
-    successRemove();
-    // Serial.println(F("Succesfully removed ID record from EEPROM"));
+  if (!findID(a)) {
+    failedWrite();  // If ID not found, indicate failure and return
+    return;
   }
-}
 
+  int numCards = EEPROM.read(0);  // Read the number of stored cards from EEPROM
+  int slot = findIDSLOT(a);  // Find the slot number of the card to delete
+  int start = (slot * 4) + 2;  // Calculate the starting address of the card to delete
+  int numBytesToMove = (numCards - slot) * 4;  // Calculate the number of bytes to shift
+
+  numCards--;  // Decrement the number of stored cards
+  EEPROM.write(0, numCards);  // Update the number of stored cards in EEPROM
+
+  // Shift the remaining cards in EEPROM to fill the gap left by the deleted card
+  for (int j = 0; j < numBytesToMove; j++) {
+    EEPROM.write(start + j, EEPROM.read(start + 4 + j));
+  }
+
+  // Clear the bytes occupied by the deleted card
+  for (int k = 0; k < 4; k++) {
+    EEPROM.write(start + numBytesToMove + k, 0);
+  }
+
+  successRemove();  // Indicate successful removal
+}
 /***************************************************************************************************/
 
 /**************************************** Read an ID from EEPROM************************************/
@@ -118,7 +110,6 @@ void readID(int number) {
     storedCard[i] = EEPROM.read(start + i);  // Assign values read from EEPROM to array
   }
 }
-
 /***************************************************************************************************/
 
 /****************************************Add ID to EEPROM*******************************************/
@@ -139,25 +130,22 @@ void writeID(uint32_t a[]) {
     // Serial.println(F("Failed! There is something wrong with ID or bad EEPROM"));
   }
 }
-
 /***************************************************************************************************/
 
 /*****************************************Check Bytes***********************************************/
 
 boolean checkTwo(uint32_t a[], uint32_t b[]) {
-  if (a[0] != 0)                 // Make sure there is something in the array first
-    ismatch = true;              // Assume they match at first
+  if (a[0] == 0)  // Check if the first element of a is zero
+    return false; // If it's zero, return false immediately
+  
   for (int k = 0; k < 4; k++) {  // Loop 4 times
-    if (a[k] != b[k])            // IF a != b then set match = false, one fails, all fail
-      ismatch = false;
+    if (a[k] != b[k])            // If a != b, set ismatch = false and return false
+      return false;
   }
-  if (ismatch) {  // Check to see if if match is still true
-    return true;  // Return true
-  } else {
-    return false;  // Return false
-  }
+  
+  // If the loop completes without returning false, it means all elements match
+  return true; // Return true
 }
-
 /***************************************************************************************************/
 
 /*****************************************Find Slot*************************************************/
@@ -172,24 +160,24 @@ int findIDSLOT(uint32_t find[]) {
     }
   }
 }
-
 /***************************************************************************************************/
 
 /******************************************Access Granted*******************************************/
 void granted(int setDelay, String permission) {
+  // Determine LED colors based on permission
   if (permission == "YES") {
-    analogWrite(BLUELED, LED_OFF);  // Turn off blue LED
-    analogWrite(REDLED, LED_OFF);   // Turn off red LED
-    analogWrite(GREENLED, LED_ON);  // Turn on green LED
+    analogWrite(BLUELED, LED_OFF);   // Turn off blue LED
+    analogWrite(REDLED, LED_OFF);    // Turn off red LED
+    analogWrite(GREENLED, LED_ON);   // Turn on green LED
   } else {
-    analogWrite(BLUELED, LED_ON);    // Turn off blue LED
-    analogWrite(REDLED, LED_OFF);    // Turn off ßred LED
-    analogWrite(GREENLED, LED_OFF);  // Turn on green LED
+    analogWrite(BLUELED, LED_ON);    // Turn on blue LED
+    analogWrite(REDLED, LED_OFF);    // Turn off red LED
+    analogWrite(GREENLED, LED_OFF);  // Turn off green LED
   }
 
-  digitalWrite(RELAYDOOR, LOW);   // Unlock door!
-  delay(setDelay);                // Hold door lock open for given seconds
-  digitalWrite(RELAYDOOR, HIGH);  // Relock door
+  digitalWrite(RELAYDOOR, LOW);   // Unlock the door
+  delay(setDelay);                // Hold the door unlocked for the given seconds
+  digitalWrite(RELAYDOOR, HIGH);  // Relock the door
 }
 /***************************************************************************************************/
 
@@ -233,18 +221,13 @@ void normalModeOn() {
 void successWrite() {
   analogWrite(BLUELED, LED_OFF);   // Make sure blue LED is off
   analogWrite(REDLED, LED_OFF);    // Make sure red LED is off
-  analogWrite(GREENLED, LED_OFF);  // Make sure green LED is on
-  delay(200);
-  analogWrite(GREENLED, LED_ON);  // Make sure green LED is on
-  delay(200);
-  analogWrite(GREENLED, LED_OFF);  // Make sure green LED is off
-  delay(200);
-  analogWrite(GREENLED, LED_ON);  // Make sure green LED is on
-  delay(200);
-  analogWrite(GREENLED, LED_OFF);  // Make sure green LED is off
-  delay(200);
-  analogWrite(GREENLED, LED_ON);  // Make sure green LED is on
-  delay(200);
+
+  for (int i = 0; i < 3; i++) {
+    analogWrite(GREENLED, LED_ON);  // Turn on green LED
+    delay(200);
+    analogWrite(GREENLED, LED_OFF); // Turn off green LED
+    delay(200);
+  }
 }
 /***************************************************************************************************/
 
